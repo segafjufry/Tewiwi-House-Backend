@@ -1,0 +1,25 @@
+{
+  "name": "tewiwi-backend",
+  "version": "2.0.0",
+  "private": true,
+  "description": "REST API Smart Order & Production Scheduling (Express.js + PostgreSQL)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "seed": "node src/seed.js",
+    "seed:reset": "node src/seed.js --reset",
+    "seed:orders": "node src/seed.js --orders",
+    "test": "node --test",
+    "migrate": "node src/migrate.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "pg": "^8.16.0"
+  }
+}

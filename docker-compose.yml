@@ -1,0 +1,23 @@
+# PostgreSQL untuk DEVELOPMENT lokal saja (bukan untuk produksi).
+#   docker compose up -d db
+#   docker compose exec db createdb -U tewiwi tewiwi_test   # database khusus tes
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tewiwi
+      POSTGRES_PASSWORD: tewiwi
+      POSTGRES_DB: tewiwi
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tewiwi -d tewiwi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

@@ -1,0 +1,10 @@
+node_modules
+.env
+certs
+backups
+test
+test-helpers
+docker-compose.yml
+*.md
+docs
+.git
