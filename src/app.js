@@ -9,6 +9,7 @@ import slotsRouter from './routes/slots.js';
 import ordersRouter from './routes/orders.js';
 import productionRouter from './routes/production.js';
 import modelRouter from './routes/model.js';
+import authRouter from './routes/auth.js';
 
 export function createApp(db, cfg = config) {
   const app = express();
@@ -27,10 +28,18 @@ export function createApp(db, cfg = config) {
     cors({
       origin: cfg.corsOrigins,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'x-admin-key'],
+      allowedHeaders: ['Content-Type', 'x-admin-key', 'Authorization'],
       maxAge: 600,
     })
   );
+
+  // Sanitize Authorization header — strip newlines/non-printable characters
+  // yang bisa menyebabkan "Invalid character in header content" di Node.js
+  app.use((req, _res, next) => {
+    const auth = req.headers['authorization'];
+    if (auth) req.headers['authorization'] = auth.replace(/[^\x20-\x7E]/g, '').trim();
+    next();
+  });
 
   // Health check di luar rate limit (dipakai monitoring/Docker); ikut memeriksa database.
   app.get('/api/health', async (req, res) => {
@@ -54,6 +63,7 @@ export function createApp(db, cfg = config) {
   app.use('/api/orders', ordersRouter(db, cfg));
   app.use('/api/production', productionRouter(db));
   app.use('/api', modelRouter(db));
+  app.use('/api/auth', authRouter(db));
 
   app.use(notFound);
   app.use(errorHandler);
