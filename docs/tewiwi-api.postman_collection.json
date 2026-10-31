@@ -77,7 +77,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"username\": \"nama_admin\",\n    \"password\": \"password_minimal_8\",\n    \"display_name\": \"Nama Tampilan\"\n}",
+              "raw": "{\n    \"username\": \"\",\n    \"password\": \"\",\n    \"display_name\": \"\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": { "raw": "{{base_url}}/api/auth/admins", "host": ["{{base_url}}"], "path": ["api", "auth", "admins"] },
