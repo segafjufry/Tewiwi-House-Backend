@@ -1,0 +1,313 @@
+{
+  "info": {
+    "name": "Tewiwi Bakehouse API",
+    "description": "REST API untuk Tewiwi Bakehouse - Smart Order & Production Scheduling",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "    console.log('✅ Token tersimpan otomatis');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"{{admin_username}}\",\n    \"password\": \"{{admin_password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api", "auth", "login"] },
+            "description": "Login admin. Token otomatis tersimpan ke variable {{token}}."
+          }
+        },
+        {
+          "name": "My Profile (me)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/auth/me", "host": ["{{base_url}}"], "path": ["api", "auth", "me"] },
+            "description": "Info akun admin yang sedang login."
+          }
+        },
+        {
+          "name": "Daftar Admin",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/auth/admins", "host": ["{{base_url}}"], "path": ["api", "auth", "admins"] },
+            "description": "Lihat semua akun admin."
+          }
+        },
+        {
+          "name": "Buat Admin Baru",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"nama_admin\",\n    \"password\": \"password_minimal_8\",\n    \"display_name\": \"Nama Tampilan\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/auth/admins", "host": ["{{base_url}}"], "path": ["api", "auth", "admins"] },
+            "description": "Buat akun admin baru. Password minimal 8 karakter."
+          }
+        },
+        {
+          "name": "Ganti Password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"old_password\": \"password_lama\",\n    \"new_password\": \"password_baru_minimal_8\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/auth/admins/1/password", "host": ["{{base_url}}"], "path": ["api", "auth", "admins", "1", "password"] },
+            "description": "Ganti password admin. Ganti angka 1 dengan ID admin yang dituju."
+          }
+        },
+        {
+          "name": "Nonaktifkan Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"active\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/auth/admins/1/active", "host": ["{{base_url}}"], "path": ["api", "auth", "admins", "1", "active"] },
+            "description": "Nonaktifkan atau aktifkan admin. Ganti angka 1 dengan ID admin."
+          }
+        },
+        {
+          "name": "Aktifkan Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"active\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/auth/admins/1/active", "host": ["{{base_url}}"], "path": ["api", "auth", "admins", "1", "active"] },
+            "description": "Aktifkan kembali admin yang dinonaktifkan."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📦 Products",
+      "item": [
+        {
+          "name": "Daftar Produk",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/products", "host": ["{{base_url}}"], "path": ["api", "products"] },
+            "description": "Lihat semua produk aktif. Tidak perlu token."
+          }
+        },
+        {
+          "name": "Detail Produk",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/products/1", "host": ["{{base_url}}"], "path": ["api", "products", "1"] },
+            "description": "Detail satu produk. Ganti angka 1 dengan ID produk."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📅 Slots",
+      "item": [
+        {
+          "name": "Slot Tersedia",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/slots", "host": ["{{base_url}}"], "path": ["api", "slots"] },
+            "description": "Lihat slot pengiriman yang tersedia. Tidak perlu token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🛒 Orders",
+      "item": [
+        {
+          "name": "Buat Order (Publik)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customer_name\": \"Nama Pelanggan\",\n    \"phone\": \"081234567890\",\n    \"delivery_address\": \"Jl. Contoh No. 1, Kota\",\n    \"delivery_date\": \"2026-11-07\",\n    \"items\": [\n        { \"product_id\": 4, \"quantity\": 5 },\n        { \"product_id\": 8, \"quantity\": 3 }\n    ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/orders", "host": ["{{base_url}}"], "path": ["api", "orders"] },
+            "description": "Buat order baru. Tidak perlu token."
+          }
+        },
+        {
+          "name": "Lacak Order (Publik)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/orders/track/TW-73E845", "host": ["{{base_url}}"], "path": ["api", "orders", "track", "TW-73E845"] },
+            "description": "Lacak status order dengan kode. Ganti TW-73E845 dengan kode order."
+          }
+        },
+        {
+          "name": "Semua Order (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders"],
+              "query": [
+                { "key": "status", "value": "Baru", "disabled": true },
+                { "key": "date", "value": "2026-11-03", "disabled": true }
+              ]
+            },
+            "description": "Lihat semua order. Filter opsional: ?status=Baru atau ?date=2026-11-03"
+          }
+        },
+        {
+          "name": "Detail Order (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/orders/1", "host": ["{{base_url}}"], "path": ["api", "orders", "1"] },
+            "description": "Detail satu order. Ganti angka 1 dengan ID order."
+          }
+        },
+        {
+          "name": "Update Status Order (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"Dikonfirmasi\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/orders/1/status", "host": ["{{base_url}}"], "path": ["api", "orders", "1", "status"] },
+            "description": "Update status order. Status: Baru → Dikonfirmasi → Diproduksi → Dikirim → Dibatalkan"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏭 Production",
+      "item": [
+        {
+          "name": "Rekap Produksi",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/production/recap",
+              "host": ["{{base_url}}"],
+              "path": ["api", "production", "recap"],
+              "query": [
+                { "key": "from", "value": "2026-11-01", "disabled": true },
+                { "key": "to", "value": "2026-11-30", "disabled": true }
+              ]
+            },
+            "description": "Rekap order per tanggal pengiriman. Filter opsional: ?from=...&to=..."
+          }
+        },
+        {
+          "name": "Summary Produk",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/production/summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "production", "summary"],
+              "query": [
+                { "key": "date", "value": "2026-11-03", "disabled": true }
+              ]
+            },
+            "description": "Summary jumlah produk yang perlu diproduksi per tanggal."
+          }
+        },
+        {
+          "name": "Generate Brief (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"delivery_date\": \"2026-11-03\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/production/brief", "host": ["{{base_url}}"], "path": ["api", "production", "brief"] },
+            "description": "Generate production brief dengan AI (Claude) atau template."
+          }
+        }
+      ]
+    },
+    {
+      "name": "❤️ Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/health", "host": ["{{base_url}}"], "path": ["api", "health"] },
+            "description": "Cek status server dan koneksi database."
+          }
+        }
+      ]
+    }
+  ]
+}
