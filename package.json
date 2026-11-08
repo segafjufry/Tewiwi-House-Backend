@@ -14,7 +14,8 @@
     "seed:reset": "node src/seed.js --reset",
     "seed:orders": "node src/seed.js --orders",
     "test": "node --test",
-    "migrate": "node src/migrate.js"
+    "migrate": "node src/migrate.js",
+    "reset-password": "node src/reset-password.js"
   },
   "dependencies": {
     "bcryptjs": "2.4.3",

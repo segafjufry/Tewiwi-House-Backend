@@ -1,156 +1,199 @@
-# Tewiwi House – Backend (Express.js + PostgreSQL)
+# Tewiwi Bakehouse – Backend (Express.js + PostgreSQL)
 
-REST API untuk Use Case 2: Smart Order & Production Scheduling.
+REST API untuk Smart Order & Production Scheduling — Tewiwi Bakehouse Artisan Sourdough.
 
 ## Menjalankan
 
 ```bash
 npm install
-docker compose up -d db     # PostgreSQL lokal (atau pakai PostgreSQL/RDS Anda sendiri dan atur DATABASE_URL)
-cp .env.example .env        # nilai bawaan sudah cocok dengan docker-compose
-npm run dev                 # membuat tabel otomatis (migrasi), lalu jalan di http://localhost:3000
-npm run seed                # opsional: order contoh (slot terdekat dibuat penuh)
-npm run seed:orders         # tambah 7 order contoh lagi (lengkap dengan alamat) walau tabel orders sudah berisi
+cp .env.example .env        # isi DATABASE_URL dan variabel lainnya
+npm run migrate             # buat tabel (atau otomatis saat server start)
+npm run dev                 # jalan di http://localhost:3000
+npm run seed                # opsional: isi data contoh + akun admin default
+npm run seed:orders         # tambah 7 order contoh walau tabel orders sudah berisi
 ```
 
-Butuh Node.js 20+ dan PostgreSQL 14+. Saat pertama kali jalan, database kosong otomatis diisi produk, hari pengiriman
-(Selasa & Jumat, kapasitas 50) dan 16 minggu histori sintetis. `npm run seed:reset` **menghapus semua data** lalu mengulang
-dari awal (ditolak saat `NODE_ENV=production`).
+Butuh Node.js 20+ dan PostgreSQL 14+ (atau Supabase).
 
-### Menjalankan tes
-
-Tes yang memakai database butuh PostgreSQL kosong khusus tes (tes membuat dan menghapus skema sementaranya sendiri,
-tidak menyentuh data lain). Tanpa `TEST_DATABASE_URL`, tes database dilewati.
-
-```bash
-docker compose exec db createdb -U tewiwi tewiwi_test
-TEST_DATABASE_URL=postgresql://tewiwi:tewiwi@localhost:5432/tewiwi_test npm test
-```
+Saat pertama kali jalan, database kosong otomatis diisi produk, hari pengiriman (Selasa & Jumat, kapasitas 50),
+dan 16 minggu histori sintetis. `npm run seed:reset` **menghapus semua data** lalu mengulang dari awal
+(ditolak saat `NODE_ENV=production`).
 
 ## Struktur
 
 ```
 src/
   app.js, server.js, config.js
-  db.js         koneksi PostgreSQL (pool) + transaksi
-  migrate.js    menjalankan migrations/*.sql yang belum pernah dijalankan (npm run migrate)
-  routes/       products, slots, orders, production, model
-  services/     slotService (kapasitas), orderService, predictionService (model), briefService (GenAI)
-  middleware/   adminAuth (header x-admin-key), rateLimit, security, errorHandler
+  db.js           koneksi PostgreSQL (pool) + transaksi
+  migrate.js      menjalankan migrations/*.sql yang belum pernah dijalankan
+  reset-password.js  reset password admin dari terminal (darurat)
+  routes/         products, slots, orders, production, model, auth
+  services/       slotService, orderService, predictionService, briefService, adminService, paymentService
+  middleware/     adminAuth (JWT + API key), rateLimit, security, errorHandler
   seed.js, seedData.js
-migrations/     skema database (001_init.sql, ...)
+migrations/       skema database (001_init.sql, ...)
 test/, test-helpers/
-docs/           arsitektur, model, panduan
+docs/             arsitektur, model, panduan, Postman collection & environment
 ```
 
-## Mekanisme capacity management
+## Autentikasi Admin
 
-- Kapasitas slot = override tanggal (`slot_overrides`) jika ada, kalau tidak kapasitas default hari itu (`delivery_days`).
-- Terisi = jumlah `quantity` semua order pada tanggal itu yang statusnya bukan `Dibatalkan`.
-- `status` slot = `full` jika sisa = 0. Slot `full` menolak order baru.
-- `POST /api/orders` mengecek kapasitas dan menyimpan order dalam satu transaksi database, jadi dua order
-  bersamaan tidak bisa melewati kapasitas.
-- Jika ditolak (HTTP 409), response memuat `details.next_available` (slot berikutnya yang cukup), contohnya Jumat.
-- Order hanya bisa untuk tanggal >= hari ini + `MIN_LEAD_DAYS` (default 2, karena produksi H-2).
-- Membatalkan order (`Dibatalkan`) otomatis mengembalikan kapasitas. Mengaktifkan kembali order yang dibatalkan dicek ulang
-  terhadap sisa kapasitas (409 `INSUFFICIENT_CAPACITY` jika tidak cukup).
+Admin login lewat endpoint `POST /api/auth/login` dengan username dan password, lalu mendapat **JWT token** yang berlaku 8 jam.
+Token dikirim di header `Authorization: Bearer <token>` untuk semua request admin.
 
-## Autentikasi
+API key lama (`x-admin-key`) tetap didukung untuk backward-compatibility.
 
-Endpoint publik: lihat produk, lihat slot, buat order, cek order lewat kode.
-Endpoint admin memerlukan header `x-admin-key: <ADMIN_API_KEY>`.
+### Akun default (setelah `npm run seed`)
+
+| Username | Password | Display Name |
+|---|---|---|
+| `admin` | `tewiwi2025` | Admin Tewiwi |
+
+Segera ganti password setelah login pertama lewat `PATCH /api/auth/admins/1/password`.
+
+### Lupa password?
+
+```bash
+npm run reset-password -- <username> <password_baru>
+
+# Contoh
+npm run reset-password -- admin passwordbaru123
+```
+
+## Produk
+
+Produk yang tersedia sesuai menu Tewiwi Bakehouse:
+
+| Produk | Harga |
+|---|---|
+| Espresso Fudgy Brownies S (10x5) | Rp 18.000 |
+| Espresso Fudgy Brownies L (10x20) | Rp 62.000 |
+| Blueberry Cheese Crumble | Rp 23.000 |
+| Korean Garlic Creamcheese | Rp 20.000 |
+| Cranberry Walnut Creamcheese | Rp 23.000 |
+| Dusty Choco Hazelnut | Rp 23.000 |
+| Paket Alit (Semua Varian) | Rp 60.000 |
+| Salt Bread Original | Rp 18.000 |
+| Sei Cheese Salt Bread (Sei Sapi + Cheese) | Rp 23.000 |
+| Shokupan Loaf (Roti Tawar) | Rp 25.000 |
+| Country Bread | Rp 38.000 |
 
 ## Endpoint
 
 Semua response sukses berbentuk `{ "data": ... }`, error berbentuk `{ "error": { code, message, details } }`.
 
+### 🔐 Auth
+
 | Method | Path | Akses | Keterangan |
 |---|---|---|---|
-| GET | /api/health | publik | cek server |
-| GET | /api/products | publik | produk aktif (`?all=true` + admin key = semua) |
-| GET | /api/products/:id | publik | detail produk |
-| POST / PUT / DELETE | /api/products, /api/products/:id | admin | CRUD produk (hapus produk yang sudah dipakai = 409, nonaktifkan saja) |
-| GET | /api/slots?count=8 | publik | slot mendatang: capacity, used, left, status, next_available |
-| GET | /api/slots/:date | publik | satu slot (YYYY-MM-DD) |
-| GET | /api/slots/config | admin | hari pengiriman dan override |
+| POST | /api/auth/login | publik | Login, mendapat JWT token |
+| GET | /api/auth/me | admin | Info akun yang sedang login |
+| GET | /api/auth/admins | admin | Daftar semua admin |
+| POST | /api/auth/admins | admin | Buat admin baru |
+| PATCH | /api/auth/admins/:id/password | admin | Ganti password |
+| PATCH | /api/auth/admins/:id/active | admin | Aktifkan / nonaktifkan admin |
+
+### 📦 Products
+
+| Method | Path | Akses | Keterangan |
+|---|---|---|---|
+| GET | /api/products | publik | Produk aktif (`?all=true` + admin = semua) |
+| GET | /api/products/:id | publik | Detail produk |
+| POST | /api/products | admin | Tambah produk baru |
+| PUT | /api/products/:id | admin | Update produk |
+| DELETE | /api/products/:id | admin | Hapus produk (409 jika sudah dipakai, nonaktifkan saja) |
+
+### 📅 Slots
+
+| Method | Path | Akses | Keterangan |
+|---|---|---|---|
+| GET | /api/slots?count=8 | publik | Slot mendatang: capacity, used, left, status |
+| GET | /api/slots/:date | publik | Satu slot (YYYY-MM-DD) |
+| GET | /api/slots/config | admin | Hari pengiriman dan override |
 | PUT | /api/slots/config/days/:weekday | admin | `{capacity, active}` (0=Minggu ... 6=Sabtu) |
-| PUT / DELETE | /api/slots/:date/capacity | admin | override kapasitas satu tanggal |
-| POST | /api/orders | publik | buat order |
-| GET | /api/orders/track/:code | publik | cek status via kode order |
-| GET | /api/orders?date=&status= | admin | daftar order |
-| GET | /api/orders/:id | admin | detail order |
-| PATCH | /api/orders/:id/status | admin | `{status}`: Baru, Dikonfirmasi, Diproduksi, Dikirim, Dibatalkan |
-| GET | /api/production/recap?from=&to= | admin | rekap order per tanggal pengiriman |
-| GET | /api/production/summary?date= | admin | order vs prediksi vs target produksi, estimasi tepung |
-| POST | /api/production/brief | admin | `{delivery_date}` → production brief |
-| POST | /api/predict | admin | `{delivery_date}` → prediksi demand per produk (inference API) |
+| PUT | /api/slots/:date/capacity | admin | Override kapasitas satu tanggal |
+| DELETE | /api/slots/:date/capacity | admin | Hapus override, kembali ke default |
+
+### 🛒 Orders
+
+| Method | Path | Akses | Keterangan |
+|---|---|---|---|
+| POST | /api/orders | publik | Buat order baru |
+| GET | /api/orders/track/:code | publik | Lacak status via kode order |
+| GET | /api/orders?date=&status= | admin | Daftar order (filter opsional) |
+| GET | /api/orders/:id | admin | Detail order |
+| PATCH | /api/orders/:id/status | admin | Update status order |
+
+### 🏭 Production
+
+| Method | Path | Akses | Keterangan |
+|---|---|---|---|
+| GET | /api/production/recap?from=&to= | admin | Rekap order per tanggal pengiriman |
+| GET | /api/production/summary?date= | admin | Order vs prediksi vs target, estimasi tepung |
+| POST | /api/production/brief | admin | `{delivery_date}` → production brief (AI/template) |
+
+### 🤖 Model
+
+| Method | Path | Akses | Keterangan |
+|---|---|---|---|
+| POST | /api/predict | admin | `{delivery_date}` → prediksi demand per produk |
 | GET | /api/model/evaluation | admin | MAE, MAPE, baseline pada data uji |
 
-### Contoh
+### ❤️ Health
 
-```bash
-# lihat slot
-curl localhost:3000/api/slots
+| Method | Path | Akses | Keterangan |
+|---|---|---|---|
+| GET | /api/health | publik | Cek status server dan database |
 
-# buat order
-curl -X POST localhost:3000/api/orders -H 'content-type: application/json' -d '{
-  "customer_name": "Andi", "phone": "081234567890", "delivery_address": "Jl. Melati No. 12, Bekasi",
-  "delivery_date": "2026-10-16",
-  "items": [{ "product_id": 1, "quantity": 3 }, { "product_id": 3, "quantity": 2 }]
-}'
+## Mekanisme Capacity Management
 
-# prediksi + brief (admin)
-curl -X POST localhost:3000/api/predict -H 'x-admin-key: KUNCI' -H 'content-type: application/json' -d '{"delivery_date":"2026-10-16"}'
-curl -X POST localhost:3000/api/production/brief -H 'x-admin-key: KUNCI' -H 'content-type: application/json' -d '{"delivery_date":"2026-10-16"}'
-```
+- Kapasitas slot = override tanggal (`slot_overrides`) jika ada, kalau tidak kapasitas default hari itu (`delivery_days`).
+- Terisi = jumlah `quantity` semua order yang statusnya bukan `Dibatalkan`.
+- `POST /api/orders` mengecek kapasitas dan menyimpan order dalam satu transaksi database (advisory lock per tanggal).
+- Jika ditolak (HTTP 409), response memuat `details.next_available` (slot berikutnya yang cukup).
+- Order hanya bisa untuk tanggal >= hari ini + `MIN_LEAD_DAYS` (default 2, karena produksi H-2).
+- Membatalkan order otomatis mengembalikan kapasitas.
 
-Respons `201` berisi order dan objek `payment` untuk layar "Pesanan diterima": `amount`, `bank_name`, `account_number`,
-`account_name`, `transfer_note` (= kode order), `whatsapp_number`, dan `whatsapp_url` (tautan wa.me dengan pesan siap kirim).
-Rekening dan nomor WhatsApp admin diatur lewat `PAYMENT_BANK_NAME`, `PAYMENT_ACCOUNT_NUMBER`, `PAYMENT_ACCOUNT_NAME`,
-`ADMIN_WHATSAPP` di `.env`; jika belum diisi nilainya `null`. `delivery_address` wajib (5-300 karakter) dan hanya terlihat oleh admin.
+## Postman
 
-Dari React: `fetch('http://localhost:3000/api/slots')`. Jika `status === 'full'`, nonaktifkan tombol slot dan tawarkan
-`next_available`. Atur `CORS_ORIGIN` sesuai alamat dev server React.
+File Postman tersedia di folder `docs/`:
 
-## Skema database
+| File | Keterangan |
+|---|---|
+| `tewiwi-api.postman_collection.json` | Semua endpoint lengkap dengan contoh request |
+| `tewiwi-api.postman_environment.json` | Environment variable (base_url, token, credentials) |
 
-`products`, `delivery_days`, `slot_overrides`, `orders`, `order_items`, `order_history` (+ `schema_migrations`).
-Definisi lengkap dan komentarnya ada di `migrations/001_init.sql`; perubahan skema dibuat sebagai file migrasi baru
-(`002_...sql`), bukan dengan mengedit file lama.
+Import keduanya ke Postman, pilih environment **"Tewiwi Bakehouse - Local"**, lalu jalankan request
+**Login** — token otomatis tersimpan ke `{{token}}` lewat script Tests.
+
+## Skema Database
+
+`products`, `delivery_days`, `slot_overrides`, `orders`, `order_items`, `order_history`, `admins` (+ `schema_migrations`).
+
+Definisi lengkap ada di `migrations/`. Perubahan skema dibuat sebagai file migrasi baru, bukan mengedit file lama.
 
 ## Model AI dan Generative AI
 
-- **Preprocessing:** `order_history` + order nyata yang tanggalnya sudah lewat dijumlahkan per tanggal, per produk,
-  lalu dipisah per hari pengiriman (semua Selasa, semua Jumat).
 - **Model:** weighted moving average 6 slot terakhir + setengah kemiringan tren linear (`predictionService.js`).
-- **Evaluasi:** walk-forward, 20% data terakhir sebagai data uji; dibandingkan baseline "ulangi slot sebelumnya".
-  Hasil: `GET /api/model/evaluation`.
-- **Brief:** berdasarkan order **terkonfirmasi** (`Dikonfirmasi`, `Diproduksi`, `Dikirim`) dan prediksi. Order `Baru` ikut
-  memakai kapasitas slot, tetapi hanya dilaporkan sebagai `pending` (belum masuk target). Jika `ANTHROPIC_API_KEY` diisi,
-  teks brief ditulis oleh Claude dari data terstruktur; jika kosong atau gagal, memakai template. Field `source`
-  menunjukkan `llm` atau `template`.
-- Histori default adalah **data sintetis**. Ganti dengan data asli lewat tabel `order_history`.
+- **Evaluasi:** walk-forward, 20% data terakhir sebagai data uji; MAE ~1.36 pcs vs baseline 1.63 pcs.
+- **Brief:** berdasarkan order terkonfirmasi + prediksi. Jika `ANTHROPIC_API_KEY` diisi, teks ditulis oleh Claude;
+  jika kosong atau gagal, memakai template. Field `source` menunjukkan `llm` atau `template`.
 
-## Dokumentasi lengkap
+## Dokumentasi Lengkap
 
-- [docs/ARSITEKTUR.md](docs/ARSITEKTUR.md): arsitektur, ERD dan skema database, mekanisme capacity management, status order.
-- [docs/MODEL.md](docs/MODEL.md): preprocessing, algoritma, inference API, evaluasi dan batasannya, production brief.
-- [docs/PANDUAN.md](docs/PANDUAN.md): panduan penggunaan untuk customer dan admin.
-- [DEPLOY.md](DEPLOY.md): deploy ke server publik.
-
-## Catatan
-
-- Autentikasi admin memakai satu API key bersama: cukup untuk prototype, belum untuk produksi.
-- Kapasitas slot aman untuk banyak order bersamaan karena dikunci di database (advisory lock per tanggal), jadi aman walau ada lebih dari satu instance aplikasi. Rate limit masih per proses.
+- [docs/ARSITEKTUR.md](docs/ARSITEKTUR.md) — arsitektur, ERD, skema database, capacity management, status order
+- [docs/MODEL.md](docs/MODEL.md) — preprocessing, algoritma prediksi, evaluasi, production brief
+- [docs/PANDUAN.md](docs/PANDUAN.md) — panduan penggunaan untuk customer dan admin
+- [DEPLOY.md](DEPLOY.md) — deploy ke server publik (VPS + Nginx + HTTPS)
 
 ## Produksi
 
-Panduan lengkap (VPS + Nginx + HTTPS + backup, atau Docker) ada di [DEPLOY.md](DEPLOY.md).
 Dengan `NODE_ENV=production`:
 
-- Server menolak berjalan jika `ADMIN_API_KEY` kosong/default/kurang dari 24 karakter, `CORS_ORIGIN` kosong/`*`, atau `DATABASE_URL` kosong/tidak valid.
-- Koneksi database wajib TLS terverifikasi secara bawaan (`DATABASE_SSL=verify` + `DATABASE_SSL_CA`, mis. sertifikat AWS RDS); mode lain memunculkan peringatan.
-- Rate limit per IP: semua `/api` 120/menit, `POST /api/orders` 10 per 15 menit (`RATE_LIMIT_ORDERS`), cek kode order 30 per 15 menit, dan 10 admin key salah = diblokir 15 menit.
-- Header keamanan (nosniff, X-Frame-Options, CSP, HSTS, no-store) dan `x-powered-by` dimatikan.
-- Server hanya mendengarkan `127.0.0.1` (akses lewat Nginx) kecuali `HOST` diubah; berhenti dengan rapi saat `SIGTERM`.
-- `GET /api/health` memeriksa koneksi database. Backup: automated backup/snapshot RDS dan `pg_dump` (lihat DEPLOY.md).
+- Server menolak berjalan jika `ADMIN_API_KEY` kosong/default/kurang dari 24 karakter, `CORS_ORIGIN` kosong/`*`,
+  atau `DATABASE_URL` kosong/tidak valid.
+- Koneksi database wajib TLS (`DATABASE_SSL=verify` + `DATABASE_SSL_CA`).
+- Rate limit per IP: semua `/api` 120/menit, `POST /api/orders` 10 per 15 menit, cek kode order 30 per 15 menit,
+  10 salah admin key = diblokir 15 menit.
+- Header keamanan (nosniff, X-Frame-Options, CSP, HSTS) dan `x-powered-by` dimatikan.
+- Server hanya mendengarkan `127.0.0.1` kecuali `HOST` diubah; berhenti dengan rapi saat `SIGTERM`.
