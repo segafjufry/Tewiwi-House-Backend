@@ -47,7 +47,7 @@ API key lama (`x-admin-key`) tetap didukung untuk backward-compatibility.
 
 | Username | Password | Display Name |
 |---|---|---|
-| `admin` | `tewiwi2025` | Admin Tewiwi |
+| `admin` | `**********` | Admin Tewiwi |
 
 Segera ganti password setelah login pertama lewat `PATCH /api/auth/admins/1/password`.
 
