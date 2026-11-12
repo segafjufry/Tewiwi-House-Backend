@@ -184,6 +184,7 @@ Definisi lengkap ada di `migrations/`. Perubahan skema dibuat sebagai file migra
 - [docs/ARSITEKTUR.md](docs/ARSITEKTUR.md) — arsitektur, ERD, skema database, capacity management, status order
 - [docs/MODEL.md](docs/MODEL.md) — preprocessing, algoritma prediksi, evaluasi, production brief
 - [docs/PANDUAN.md](docs/PANDUAN.md) — panduan penggunaan untuk customer dan admin
+- [docs/FRONTEND.md](docs/FRONTEND.md) — panduan integrasi frontend (API client, contoh React, error handling)
 - [DEPLOY.md](DEPLOY.md) — deploy ke server publik (VPS + Nginx + HTTPS)
 
 ## Produksi
