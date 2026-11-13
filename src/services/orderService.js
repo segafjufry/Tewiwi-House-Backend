@@ -23,7 +23,7 @@ function parseItems(raw) {
 // Satu query untuk order + item-nya (tanpa N+1). `where` hanya berisi potongan SQL tetap dari kode ini.
 async function fetchOrders(db, where, params) {
   const rows = await db.all(
-    `SELECT o.id, o.code, o.customer_name, o.phone, o.delivery_address, o.delivery_date, o.status, o.created_at,
+    `SELECT o.id, o.code, o.customer_name, o.phone, o.delivery_address, o.delivery_date, o.order_date, o.status, o.created_at,
             i.product_id, p.name AS product_name, i.quantity, i.unit_price
      FROM orders o
      LEFT JOIN order_items i ON i.order_id = o.id
@@ -43,6 +43,7 @@ async function fetchOrders(db, where, params) {
         phone: r.phone,
         delivery_address: r.delivery_address,
         delivery_date: r.delivery_date,
+        order_date: r.order_date,
         status: r.status,
         created_at: r.created_at,
         items: [],
@@ -180,5 +181,5 @@ export async function updateOrderStatus(db, id, status) {
 export async function trackByCode(db, code) {
   const [o] = await fetchOrders(db, 'WHERE o.code = $1', [String(code).toUpperCase()]);
   if (!o) throw new AppError(404, 'NOT_FOUND', 'Kode order tidak ditemukan');
-  return { code: o.code, delivery_date: o.delivery_date, status: o.status, items: o.items, total_price: o.total_price };
+  return { code: o.code, order_date: o.order_date, delivery_date: o.delivery_date, status: o.status, items: o.items, total_price: o.total_price };
 }
