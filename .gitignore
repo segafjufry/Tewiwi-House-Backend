@@ -1,4 +1,14 @@
-node_modules
+# Dependencies (berlaku untuk semua workspace: root, backend, frontend)
+node_modules/
+
+# Environment variables
 .env
-certs
-backups
+.env.*
+
+# Backend artifacts
+certs/
+backups/
+
+# OS files
+.DS_Store
+Thumbs.db
