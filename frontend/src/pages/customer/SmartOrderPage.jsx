@@ -1,22 +1,27 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Button, Paper, TextField, Typography } from '@mui/material'
 import { Link, useNavigate } from 'react-router-dom'
 import BrandHeader from '../../components/common/BrandHeader'
 import sourdoughImage from '../../assets/sourdough.jpg'
-import { products } from '../../data/products'
 import { rupiah } from '../../utils/formatCurrency'
-import { getDeliveryOptions } from '../../services/deliveryService'
-import {
-  dismissLastOrder,
-  isLastOrderDismissed,
-  readLastOrderCode,
-  writeLastOrderCode,
-} from '../../services/demoOrderStorage'
+import { getProducts, getSlots, createOrder } from '../../services/api'
 
-function SmartOrderPage({ orders, onCreateOrder }) {
+const FALLBACK_IMAGE = sourdoughImage
+
+// Format YYYY-MM-DD → "12 Nov"
+function formatDate(iso) {
+  const d = new Date(`${iso}T00:00:00`)
+  return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short' }).format(d)
+}
+
+function SmartOrderPage() {
   const navigate = useNavigate()
-  const deliveryOptions = getDeliveryOptions(orders)
-  const [deliveryId, setDeliveryId] = useState(deliveryOptions[1].id)
+  const [products, setProducts] = useState([])
+  const [slots, setSlots] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+
+  const [deliveryDate, setDeliveryDate] = useState('')
   const [quantities, setQuantities] = useState({})
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -25,32 +30,49 @@ function SmartOrderPage({ orders, onCreateOrder }) {
   const [phoneError, setPhoneError] = useState('')
   const [addressError, setAddressError] = useState('')
   const [formError, setFormError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  // Last-order banner state
-  const [bannerDismissed, setBannerDismissed] = useState(isLastOrderDismissed)
-  const lastOrderCode = readLastOrderCode()
-  const lastOrder = lastOrderCode ? orders.find((o) => o.code === lastOrderCode) : null
-  const showBanner = Boolean(lastOrder) && !bannerDismissed
+  // Last-order banner (kode order terakhir, disimpan di localStorage untuk tampilkan "pesan lagi")
+  const [bannerDismissed, setBannerDismissed] = useState(
+    () => localStorage.getItem('tewiwi-last-order-dismissed') === 'true',
+  )
+  const lastOrderCode = localStorage.getItem('tewiwi-last-order-code')
+  const showBanner = Boolean(lastOrderCode) && !bannerDismissed
 
-  const handleDismissBanner = () => {
-    dismissLastOrder()
-    setBannerDismissed(true)
-  }
+  useEffect(() => {
+    let active = true
+    Promise.all([getProducts(), getSlots({ count: 6 })])
+      .then(([p, s]) => {
+        if (!active) return
+        setProducts(p ?? [])
+        setSlots(s ?? [])
+        const firstAvailable = (s ?? []).find((slot) => slot.status !== 'full' && slot.left > 0)
+        setDeliveryDate(firstAvailable?.delivery_date ?? (s?.[0]?.delivery_date ?? ''))
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (!active) return
+        setLoadError(err.message ?? 'Gagal memuat data')
+        setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
-  const selectedDelivery =
-    deliveryOptions.find((option) => option.id === deliveryId) ?? deliveryOptions[1]
-  const totalItems = Object.values(quantities).reduce((total, quantity) => total + quantity, 0)
+  const selectedDelivery = slots.find((slot) => slot.delivery_date === deliveryDate) ?? slots[0]
+  const totalItems = Object.values(quantities).reduce((total, qty) => total + qty, 0)
   const totalPrice = products.reduce(
     (total, product) => total + product.price * (quantities[product.id] ?? 0),
     0,
   )
 
   const changeQuantity = (productId, amount) => {
-    if (amount > 0 && totalItems >= selectedDelivery.available) {
-      setFormError(`Kuota untuk tanggal ini maksimal ${selectedDelivery.available} roti.`)
+    const limit = selectedDelivery?.left ?? 0
+    if (amount > 0 && totalItems >= limit) {
+      setFormError(`Kuota untuk tanggal ini maksimal ${limit} roti.`)
       return
     }
-
     setQuantities((current) => ({
       ...current,
       [productId]: Math.max(0, (current[productId] ?? 0) + amount),
@@ -58,7 +80,12 @@ function SmartOrderPage({ orders, onCreateOrder }) {
     setFormError('')
   }
 
-  const submitOrder = (event) => {
+  const dismissBanner = () => {
+    localStorage.setItem('tewiwi-last-order-dismissed', 'true')
+    setBannerDismissed(true)
+  }
+
+  const submitOrder = async (event) => {
     event.preventDefault()
     setNameError('')
     setPhoneError('')
@@ -73,8 +100,9 @@ function SmartOrderPage({ orders, onCreateOrder }) {
       setFormError('Pilih minimal 1 roti sebelum mengirim pesanan.')
       return
     }
-    if (totalItems > selectedDelivery.available) {
-      setFormError(`Kuota untuk tanggal ini hanya ${selectedDelivery.available} roti.`)
+    const limit = selectedDelivery?.left ?? 0
+    if (totalItems > limit) {
+      setFormError(`Kuota untuk tanggal ini hanya ${limit} roti.`)
       return
     }
 
@@ -88,33 +116,43 @@ function SmartOrderPage({ orders, onCreateOrder }) {
       return
     }
 
-    const order = {
-      code: `TW-${window.crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-      createdAt: new Date().toISOString(),
-      name: name.trim(),
-      phone: phone.trim(),
-      address: address.trim(),
-      delivery: {
-        id: selectedDelivery.id,
-        weekday: selectedDelivery.weekday,
-        date: selectedDelivery.date,
-      },
-      items: products
-        .filter((product) => quantities[product.id] > 0)
-        .map((product) => ({
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          quantity: quantities[product.id],
-        })),
-      totalItems,
-      totalPrice,
-      status: 'Baru',
+    setSubmitting(true)
+    try {
+      const order = await createOrder({
+        customer_name: name.trim(),
+        phone: phone.trim(),
+        delivery_address: address.trim(),
+        delivery_date: selectedDelivery.delivery_date,
+        items: products
+          .filter((product) => quantities[product.id] > 0)
+          .map((product) => ({ product_id: product.id, quantity: quantities[product.id] })),
+      })
+      localStorage.setItem('tewiwi-last-order-code', order.code)
+      localStorage.removeItem('tewiwi-last-order-dismissed')
+      navigate(`/sukses/${order.code}`, { state: { order } })
+    } catch (err) {
+      if (err.code === 'SLOT_FULL' || err.code === 'INSUFFICIENT_CAPACITY') {
+        const next = err.details?.next_available?.delivery_date
+        setFormError(next ? `Slot penuh. Slot terdekat tersedia: ${next}` : 'Slot penuh, pilih tanggal lain.')
+      } else if (err.code === 'TOO_SOON') {
+        setFormError('Pemesanan minimal 2 hari sebelum pengiriman.')
+      } else if (err.code === 'RATE_LIMITED') {
+        setFormError('Terlalu banyak percobaan, coba lagi dalam beberapa menit.')
+      } else {
+        setFormError(err.message ?? 'Terjadi kesalahan, coba lagi.')
+      }
+    } finally {
+      setSubmitting(false)
     }
+  }
 
-    onCreateOrder(order)
-    writeLastOrderCode(order.code)
-    navigate(`/sukses/${order.code}`)
+  if (loading) {
+    return (
+      <main className="page-shell">
+        <BrandHeader />
+        <p className="muted">Memuat data…</p>
+      </main>
+    )
   }
 
   return (
@@ -125,17 +163,17 @@ function SmartOrderPage({ orders, onCreateOrder }) {
         <div className="last-order-banner" role="region" aria-label="Pesanan terakhir">
           <div className="last-order-banner-body">
             <span className="last-order-banner-label">Pesanan terakhirmu</span>
-            <span className="last-order-banner-code">{lastOrder.code}</span>
+            <span className="last-order-banner-code">{lastOrderCode}</span>
           </div>
           <div className="last-order-banner-actions">
-            <Link to={`/tracking/${lastOrder.code}`} className="last-order-track-link">
+            <Link to={`/tracking/${lastOrderCode}`} className="last-order-track-link">
               Lacak
             </Link>
             <button
               type="button"
               className="last-order-close-btn"
               aria-label="Tutup banner pesanan terakhir"
-              onClick={handleDismissBanner}
+              onClick={dismissBanner}
             >
               ✕
             </button>
@@ -160,6 +198,8 @@ function SmartOrderPage({ orders, onCreateOrder }) {
         <img className="hero-image" src={sourdoughImage} alt="Roti sourdough artisan" />
       </section>
 
+      {loadError && <Alert severity="error">{loadError}</Alert>}
+
       <div className="order-content" id="menu">
         <section>
           <Paper className="order-card products-card" elevation={0}>
@@ -169,15 +209,20 @@ function SmartOrderPage({ orders, onCreateOrder }) {
             <div className="product-list">
               {products.map((product) => {
                 const quantity = quantities[product.id] ?? 0
-
                 return (
                   <article className={`product-row${quantity ? ' is-selected' : ''}`} key={product.id}>
-                    <img className="product-image" src={product.image} alt={product.name} />
+                    <img
+                      className="product-image"
+                      src={product.image_url || FALLBACK_IMAGE}
+                      alt={product.name}
+                    />
                     <div className="product-details">
                       <Typography component="h3" className="product-name">
                         {product.name}
                       </Typography>
-                      <p className="product-description">{product.description}</p>
+                      {product.description && (
+                        <p className="product-description">{product.description}</p>
+                      )}
                       <Typography className="product-price">{rupiah(product.price)}</Typography>
                     </div>
                     <div className="quantity-control" aria-label={`Jumlah ${product.name}`}>
@@ -211,25 +256,24 @@ function SmartOrderPage({ orders, onCreateOrder }) {
               2. Pilih hari pengiriman
             </Typography>
             <div className="delivery-options">
-              {deliveryOptions.map((option) => {
-                const isFull = option.available === 0
-                const isSelected = option.id === deliveryId
-
+              {slots.map((slot) => {
+                const isFull = slot.left === 0 || slot.status === 'full'
+                const isSelected = slot.delivery_date === deliveryDate
                 return (
                   <button
-                    key={option.id}
+                    key={slot.delivery_date}
                     type="button"
                     className={`delivery-option${isFull ? ' is-full' : ''}${isSelected ? ' is-selected' : ''}`}
-                    disabled={isFull || totalItems > option.available}
+                    disabled={isFull || totalItems > slot.left}
                     aria-pressed={isSelected}
-                    onClick={() => setDeliveryId(option.id)}
+                    onClick={() => setDeliveryDate(slot.delivery_date)}
                   >
                     <span className="delivery-date">
-                      {option.weekday},<br />
-                      {option.date}
+                      {slot.day_name},<br />
+                      {formatDate(slot.delivery_date)}
                     </span>
                     <span className="delivery-capacity">
-                      {isFull ? 'Penuh' : `Sisa ${option.available} dari ${option.capacity} roti`}
+                      {isFull ? 'Penuh' : `Sisa ${slot.left} dari ${slot.capacity} roti`}
                     </span>
                   </button>
                 )
@@ -291,8 +335,8 @@ function SmartOrderPage({ orders, onCreateOrder }) {
               />
               {formError && <Alert severity="error">{formError}</Alert>}
               <div className="submit-row">
-                <Button type="submit" variant="contained">
-                  Kirim pesanan · {totalItems} roti · {rupiah(totalPrice)}
+                <Button type="submit" variant="contained" disabled={submitting}>
+                  {submitting ? 'Memproses...' : `Kirim pesanan · ${totalItems} roti · ${rupiah(totalPrice)}`}
                 </Button>
               </div>
             </form>

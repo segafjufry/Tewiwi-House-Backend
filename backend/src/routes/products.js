@@ -3,10 +3,21 @@ import { adminOnly, isAdmin } from '../middleware/adminAuth.js';
 import { AppError } from '../utils/errors.js';
 import { reqBool, reqInt, reqString } from '../utils/validate.js';
 
+// String opsional: boleh kosong, maksimal `max` karakter.
+function optString(v, fallback, name, max = 500) {
+  const raw = v ?? fallback ?? '';
+  if (typeof raw !== 'string') throw new AppError(400, 'VALIDATION_ERROR', `${name} harus berupa teks`);
+  const s = raw.trim();
+  if (s.length > max) throw new AppError(400, 'VALIDATION_ERROR', `${name} maksimal ${max} karakter`);
+  return s;
+}
+
 const parse = (b = {}, partial = null) => ({
   name: reqString(b.name ?? partial?.name, 'name'),
   price: reqInt(b.price ?? partial?.price, 'price'),
   flour_grams: reqInt(b.flour_grams ?? partial?.flour_grams ?? 0, 'flour_grams'),
+  description: optString(b.description, partial?.description, 'description'),
+  image_url: optString(b.image_url, partial?.image_url, 'image_url'),
   active: reqBool(b.active ?? partial?.active ?? true, 'active'),
 });
 
@@ -29,8 +40,8 @@ export default function productsRouter(db) {
   r.post('/', adminOnly, async (req, res) => {
     const p = parse(req.body);
     const created = await db.get(
-      'INSERT INTO products (name, price, flour_grams, active) VALUES ($1, $2, $3, $4) RETURNING *',
-      [p.name, p.price, p.flour_grams, p.active]
+      'INSERT INTO products (name, price, flour_grams, description, image_url, active) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [p.name, p.price, p.flour_grams, p.description, p.image_url, p.active]
     );
     res.status(201).json({ data: created });
   });
@@ -39,8 +50,8 @@ export default function productsRouter(db) {
     const old = await find(req.params.id);
     const p = parse(req.body, old);
     const updated = await db.get(
-      'UPDATE products SET name = $1, price = $2, flour_grams = $3, active = $4 WHERE id = $5 RETURNING *',
-      [p.name, p.price, p.flour_grams, p.active, old.id]
+      'UPDATE products SET name = $1, price = $2, flour_grams = $3, description = $4, image_url = $5, active = $6 WHERE id = $7 RETURNING *',
+      [p.name, p.price, p.flour_grams, p.description, p.image_url, p.active, old.id]
     );
     res.json({ data: updated });
   });

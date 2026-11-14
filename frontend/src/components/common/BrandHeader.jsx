@@ -1,9 +1,8 @@
 import { Link } from 'react-router-dom'
 import logo from '../../assets/tewiwi-logo.jpeg'
-import { readLastOrderCode } from '../../services/demoOrderStorage'
 
 function BrandHeader({ admin = false }) {
-  const lastOrderCode = readLastOrderCode()
+  const lastOrderCode = localStorage.getItem('tewiwi-last-order-code')
   const trackHref = lastOrderCode ? `/tracking/${lastOrderCode}` : null
 
   return (

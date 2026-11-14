@@ -1,20 +1,16 @@
 import { useState } from 'react'
 import { Alert, Button, TextField } from '@mui/material'
-import { Link, Navigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import AdminAuthLayout from './AdminAuthLayout'
-import {
-  isAdminDemoMode,
-  isSupabaseConfigured,
-  signInAdmin,
-} from '../../services/adminAuthService'
+import { signInAdmin } from '../../services/adminAuthService'
 
-function AdminLoginPage({ authReady, isAuthenticated, onAuthenticated }) {
-  const [email, setEmail] = useState('')
+function AdminLoginPage({ isAuthenticated, onAuthenticated }) {
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  if (authReady && isAuthenticated) {
+  if (isAuthenticated) {
     return <Navigate to="/admin" replace />
   }
 
@@ -24,14 +20,16 @@ function AdminLoginPage({ authReady, isAuthenticated, onAuthenticated }) {
     setIsSubmitting(true)
 
     try {
-      const session = await signInAdmin(email.trim(), password)
+      const session = await signInAdmin(username.trim(), password)
       onAuthenticated(session)
     } catch (error) {
       console.error('Gagal login admin:', error)
       setErrorMessage(
-        isSupabaseConfigured && !isAdminDemoMode
-          ? 'Email atau password tidak valid. Periksa kembali lalu coba lagi.'
-          : error.message,
+        error.code === 'INVALID_CREDENTIALS'
+          ? 'Username atau password salah. Periksa kembali lalu coba lagi.'
+          : error.code === 'NETWORK_ERROR'
+            ? 'Tidak dapat terhubung ke server. Periksa koneksi atau backend.'
+            : error.message ?? 'Gagal login, coba lagi.',
       )
     } finally {
       setIsSubmitting(false)
@@ -43,23 +41,13 @@ function AdminLoginPage({ authReady, isAuthenticated, onAuthenticated }) {
       title="Login admin"
       description="Masuk untuk mengelola pesanan dan produksi."
     >
-      {isAdminDemoMode ? (
-        <Alert severity="warning" className="admin-auth-alert">
-          Mode demo.  email <strong>demo@tewiwi.local</strong> dan password <strong>TewiwiDemo123!</strong>. 
-        </Alert>
-      ) : !isSupabaseConfigured && (
-        <Alert severity="warning" className="admin-auth-alert">
-          Belum bisa login, belum konfigurasi ke supabase
-        </Alert>
-      )}
       {errorMessage && <Alert severity="error" className="admin-auth-alert">{errorMessage}</Alert>}
       <form className="admin-auth-form" onSubmit={handleSubmit}>
         <TextField
-          label="Email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          label="Username"
+          autoComplete="username"
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
           required
           fullWidth
         />
@@ -75,15 +63,12 @@ function AdminLoginPage({ authReady, isAuthenticated, onAuthenticated }) {
         <Button
           type="submit"
           variant="contained"
-          disabled={isSubmitting || (!isSupabaseConfigured && !isAdminDemoMode)}
+          disabled={isSubmitting}
           fullWidth
         >
           {isSubmitting ? 'Memproses...' : 'Masuk'}
         </Button>
       </form>
-      <Link className="admin-auth-link" to="/admin/lupa-password">
-        Lupa password?
-      </Link>
     </AdminAuthLayout>
   )
 }

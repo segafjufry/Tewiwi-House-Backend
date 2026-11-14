@@ -19,25 +19,39 @@ export async function seedBase(db) {
     await tx.lock('tewiwi:seed');
     if ((await tx.get('SELECT COUNT(*) AS n FROM products')).n > 0) return false;
 
+    // { name, price, flour_grams, base: [selasa, jumat], description, image_url }
     const products = [
-      // [name, price, flour_grams, [base_selasa, base_jumat]]
-      ['Espresso Fudgy Brownies S (10x5)',           18000,  60, [8,  9]],
-      ['Espresso Fudgy Brownies L (10x20)',           62000, 220, [3,  4]],
-      ['Blueberry Cheese Crumble',                   23000,  90, [10, 12]],
-      ['Korean Garlic Creamcheese',                  20000,  85, [9,  11]],
-      ['Cranberry Walnut Creamcheese',               23000,  90, [10, 11]],
-      ['Dusty Choco Hazelnut',                       23000,  90, [9,  10]],
-      ['Paket Alit (Semua Varian)',                  60000, 300, [5,   6]],
-      ['Salt Bread Original',                        18000,  80, [11, 13]],
-      ['Sei Cheese Salt Bread (Sei Sapi + Cheese)',  23000,  95, [8,   9]],
-      ['Shokupan Loaf (Roti Tawar)',                 25000, 200, [6,   7]],
-      ['Country Bread',                              38000, 280, [5,   6]],
+      { name: 'Espresso Fudgy Brownies S (10x5)',          price: 18000, flour:  60, base: [8,  9],
+        description: 'Brownies fudgy espresso ukuran kecil, padat dan lembap dengan rasa kopi yang pas.', image_url: '' },
+      { name: 'Espresso Fudgy Brownies L (10x20)',          price: 62000, flour: 220, base: [3,  4],
+        description: 'Brownies fudgy espresso ukuran besar, cocok untuk berbagi dengan keluarga.', image_url: '' },
+      { name: 'Blueberry Cheese Crumble',                   price: 23000, flour:  90, base: [10, 12],
+        description: 'Roti dengan isian blueberry, taburan keju, dan crumble renyah di atasnya.', image_url: '' },
+      { name: 'Korean Garlic Creamcheese',                  price: 20000, flour:  85, base: [9,  11],
+        description: 'Roti garlic ala Korea dengan filling creamcheese yang gurih dan creamy.', image_url: '' },
+      { name: 'Cranberry Walnut Creamcheese',               price: 23000, flour:  90, base: [10, 11],
+        description: 'Roti creamcheese dengan cranberry asam dan kacang walnut yang renyah.', image_url: '' },
+      { name: 'Dusty Choco Hazelnut',                       price: 23000, flour:  90, base: [9,  10],
+        description: 'Roti berlapis cokelat dan hazelnut dengan taburan dusty sugar.', image_url: '' },
+      { name: 'Paket Alit (Semua Varian)',                  price: 60000, flour: 300, base: [5,   6],
+        description: 'Paket assortmen berisi berbagai varian roti signature Tewiwi.', image_url: '' },
+      { name: 'Salt Bread Original',                        price: 18000, flour:  80, base: [11, 13],
+        description: 'Roti salt bread klasik dengan kulit renyah dan bagian dalam empuk berminyak.', image_url: '' },
+      { name: 'Sei Cheese Salt Bread (Sei Sapi + Cheese)',  price: 23000, flour:  95, base: [8,   9],
+        description: 'Salt bread dengan isian sei sapi dan keju yang gurih dan menggugah selera.', image_url: '' },
+      { name: 'Shokupan Loaf (Roti Tawar)',                 price: 25000, flour: 200, base: [6,   7],
+        description: 'Roti tawar Jepang (shokupan) yang lembut, empuk, dan serbaguna.', image_url: '' },
+      { name: 'Country Bread',                             price: 38000, flour: 280, base: [5,   6],
+        description: 'Roti country bread artisan dengan kulit tebal dan remah yang kenyal.', image_url: '' },
     ];
 
     const inserted = []; // { id, base: [selasa, jumat] }
-    for (const [name, price, flour, base] of products) {
-      const row = await tx.get('INSERT INTO products (name, price, flour_grams) VALUES ($1, $2, $3) RETURNING id', [name, price, flour]);
-      inserted.push({ id: row.id, base });
+    for (const p of products) {
+      const row = await tx.get(
+        'INSERT INTO products (name, price, flour_grams, description, image_url) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+        [p.name, p.price, p.flour, p.description, p.image_url]
+      );
+      inserted.push({ id: row.id, base: p.base });
     }
     await tx.run('INSERT INTO delivery_days (weekday, capacity) VALUES (2, 50), (5, 50)'); // Selasa & Jumat
 

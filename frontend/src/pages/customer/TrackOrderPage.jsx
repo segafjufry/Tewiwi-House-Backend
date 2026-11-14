@@ -1,7 +1,9 @@
-import { Paper, Typography } from '@mui/material'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Alert, Paper, Typography } from '@mui/material'
+import { Link, useParams } from 'react-router-dom'
 import BrandHeader from '../../components/common/BrandHeader'
 import { rupiah } from '../../utils/formatCurrency'
+import { trackOrder } from '../../services/api'
 
 const STATUS_STEPS = ['Baru', 'Dikonfirmasi', 'Diproduksi', 'Dikirim']
 
@@ -41,13 +43,11 @@ const STATUS_INFO = {
 
 function StatusStepper({ currentStatus }) {
   const currentStep = STATUS_STEPS.indexOf(currentStatus)
-
   return (
     <div className="track-stepper" aria-label="Status pengiriman">
       {STATUS_STEPS.map((step, index) => {
         const isDone = index < currentStep
         const isActive = index === currentStep
-
         return (
           <div
             key={step}
@@ -65,11 +65,60 @@ function StatusStepper({ currentStatus }) {
   )
 }
 
-function TrackOrderPage({ orders }) {
-  const { code } = useParams()
-  const order = orders.find((o) => o.code === code)
+function formatDelivery(iso) {
+  if (!iso) return ''
+  const d = new Date(`${iso}T00:00:00`)
+  const weekday = new Intl.DateTimeFormat('id-ID', { weekday: 'long' }).format(d)
+  const date = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short' }).format(d)
+  return `${weekday}, ${date}`
+}
 
-  if (!order) return <Navigate to="/" replace />
+function TrackOrderPage() {
+  const { code } = useParams()
+  const [order, setOrder] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    if (!code) return
+    trackOrder(code)
+      .then((data) => {
+        if (active) setOrder(data)
+      })
+      .catch((err) => {
+        if (active) setError(err.code === 'NOT_FOUND' ? 'Kode order tidak ditemukan' : err.message)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [code])
+
+  if (loading) {
+    return (
+      <main className="page-shell">
+        <BrandHeader />
+        <p className="muted">Melacak pesanan…</p>
+      </main>
+    )
+  }
+
+  if (!order) {
+    return (
+      <main className="page-shell">
+        <BrandHeader />
+        <div className="order-content track-content">
+          <Paper className="order-card track-card" elevation={0}>
+            {error && <Alert severity="error">{error}</Alert>}
+            <Link to="/" className="track-back-link">← Kembali ke beranda</Link>
+          </Paper>
+        </div>
+      </main>
+    )
+  }
 
   const info = STATUS_INFO[order.status] ?? STATUS_INFO['Baru']
   const isCancelled = order.status === 'Dibatalkan'
@@ -79,8 +128,6 @@ function TrackOrderPage({ orders }) {
       <BrandHeader />
       <div className="order-content track-content">
         <Paper className="order-card track-card" elevation={0}>
-
-          {/* Header: icon + title + code */}
           <div className="track-header">
             <div
               className="track-icon-box"
@@ -95,44 +142,32 @@ function TrackOrderPage({ orders }) {
             </div>
           </div>
 
-          {/* Description */}
           <p className="track-description">{info.description}</p>
 
-          {/* Stepper or cancelled badge */}
           {isCancelled ? (
             <div className="track-cancelled-badge">Pesanan Dibatalkan</div>
           ) : (
             <StatusStepper currentStatus={order.status} />
           )}
 
-          {/* Delivery info panel */}
           <div className="track-info-panel">
             <div className="track-info-row">
               <span>Pengiriman</span>
-              <strong>{order.delivery.weekday}, {order.delivery.date}</strong>
-            </div>
-            <div className="track-info-row">
-              <span>Alamat</span>
-              <strong>{order.address}</strong>
-            </div>
-            <div className="track-info-row">
-              <span>Nama</span>
-              <strong>{order.name}</strong>
+              <strong>{formatDelivery(order.delivery_date)}</strong>
             </div>
           </div>
 
-          {/* Order summary */}
           <section className="track-order-summary" aria-label="Ringkasan pesanan">
             <h2>Ringkasan pesanan</h2>
             {order.items.map((item) => (
-              <div className="summary-row" key={item.id}>
+              <div className="summary-row" key={item.product_id ?? item.id}>
                 <span>{item.quantity} × {item.name}</span>
-                <strong>{rupiah(item.price * item.quantity)}</strong>
+                <strong>{rupiah(item.unit_price * item.quantity)}</strong>
               </div>
             ))}
             <div className="summary-row summary-total">
-              <span>Total · {order.totalItems} item</span>
-              <strong>{rupiah(order.totalPrice)}</strong>
+              <span>Total · {order.items.reduce((n, i) => n + i.quantity, 0)} item</span>
+              <strong>{rupiah(order.total_price)}</strong>
             </div>
           </section>
 

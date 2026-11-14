@@ -1,103 +1,61 @@
-import { createClient } from '@supabase/supabase-js'
+import { login as apiLogin, logout as apiLogout, isLoggedIn, getMe } from './api.js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim()
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
+// Autentikasi admin lewat backend (username + password + JWT).
+// Info admin di-cache di localStorage agar sesi bertahan saat halaman di-refresh.
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
-export const isAdminDemoMode =
-  import.meta.env.DEV &&
-  !isSupabaseConfigured &&
-  import.meta.env.VITE_ADMIN_DEMO_MODE !== 'false'
+const ADMIN_KEY = 'tewiwi_admin'
 
-const demoEmail = 'demo@tewiwi.local'
-const demoPassword = 'TewiwiDemo123!'
-const demoSessionKey = 'tewiwi-admin-demo-session'
-
-const supabase = isSupabaseConfigured && !isAdminDemoMode
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null
-
-function getAuthClient() {
-  if (!supabase) {
-    throw new Error(
-      'Autentikasi belum dikonfigurasi. Tambahkan VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.',
-    )
-  }
-
-  return supabase
+function saveAdmin(admin) {
+  if (admin) localStorage.setItem(ADMIN_KEY, JSON.stringify(admin))
+  else localStorage.removeItem(ADMIN_KEY)
 }
 
-function throwOnError({ error }) {
-  if (error) {
-    throw error
-  }
-}
-
-export function subscribeToAuthChanges(onSessionChange) {
-  if (!supabase) {
-    return () => {}
-  }
-
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => {
-    onSessionChange(session)
-  })
-
-  return () => subscription.unsubscribe()
-}
-
-export async function signInAdmin(email, password) {
-  if (isAdminDemoMode) {
-    if (email.toLowerCase() !== demoEmail || password !== demoPassword) {
-      throw new Error('Email atau password demo tidak valid.')
-    }
-
-    const session = { user: { email: demoEmail }, isDemo: true }
-    window.sessionStorage.setItem(demoSessionKey, JSON.stringify(session))
-    return session
-  }
-
-  const result = await getAuthClient().auth.signInWithPassword({ email, password })
-  throwOnError(result)
-  return result.data.session
-}
-
-export async function signOutAdmin() {
-  if (isAdminDemoMode) {
-    window.sessionStorage.removeItem(demoSessionKey)
-    return
-  }
-
-  const result = await getAuthClient().auth.signOut()
-  throwOnError(result)
-}
-
-export async function requestAdminPasswordReset(email) {
-  if (isAdminDemoMode) {
-    throw new Error('Reset password tidak tersedia dalam mode demo.')
-  }
-
-  const result = await getAuthClient().auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/admin/reset-password`,
-  })
-  throwOnError(result)
-}
-
-export async function updateAdminPassword(password) {
-  if (isAdminDemoMode) {
-    throw new Error('Reset password tidak tersedia dalam mode demo.')
-  }
-
-  const result = await getAuthClient().auth.updateUser({ password })
-  throwOnError(result)
-}
-
-export function getInitialAdminSession() {
-  if (!isAdminDemoMode) {
+function getStoredAdmin() {
+  try {
+    const raw = localStorage.getItem(ADMIN_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
     return null
   }
+}
 
-  const savedSession = window.sessionStorage.getItem(demoSessionKey)
-  return savedSession ? JSON.parse(savedSession) : null
+/**
+ * Sesi awal: jika ada token dan info admin tersimpan, anggap masih login.
+ * Validitas token diverifikasi saat request berikutnya (401 → logout otomatis).
+ */
+export function getInitialAdminSession() {
+  return isLoggedIn() && getStoredAdmin() ? { admin: getStoredAdmin() } : null
+}
+
+/**
+ * Verifikasi token masih valid dengan memanggil /api/auth/me.
+ * Dipanggil saat app pertama kali dimuat. Mengembalikan session atau null.
+ */
+export async function verifySession() {
+  if (!isLoggedIn()) return null
+  try {
+    const me = await getMe()
+    if (me?.id) {
+      saveAdmin(me)
+      return { admin: me }
+    }
+  } catch {
+    // token invalid / expired
+  }
+  apiLogout()
+  saveAdmin(null)
+  return null
+}
+
+/** Login admin. Mengembalikan { admin: { id, username, display_name } }. */
+export async function signInAdmin(username, password) {
+  const data = await apiLogin(username, password)
+  saveAdmin(data.admin)
+  return { admin: data.admin }
+}
+
+/** Logout admin. */
+export async function signOutAdmin() {
+  apiLogout()
+  saveAdmin(null)
 }
